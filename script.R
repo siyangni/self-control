@@ -6,7 +6,7 @@ library(lavaan) #SEM
 library(psych) #EDA
 
 # Read into the data file
-library(haven)
+library(haven) # Process foreign data
 # df <- read_dta("processed211.dta")
 load("sem211.RData")
 
@@ -29,21 +29,42 @@ variables <- c("cimp5", "crisk5", "cimp6", "crisk6", "cimp7", "crisk7",
                "race", "married")
 
 # Loop through each variable and print its frequency table, including NA
-for (var in variables) {
-  cat("\nFrequency of", var, ":\n")
-  print(table(df[[var]], useNA = "ifany"))
+
+frequency_table <- function(var, data) {
+  # Create frequency table with NA if any
+  freq <- table(data[[var]], useNA = "ifany")
+  
+  # Convert to data frame
+  freq_df <- as.data.frame(freq)
+  
+  # Rename columns
+  names(freq_df) <- c("Value", "Frequency")
+  
+  # Calculate percentage (excluding NAs for percentage calculation)
+  total <- sum(freq_df$Frequency[!is.na(freq_df$Value)])
+  freq_df$Percentage <- round((freq_df$Frequency / total) * 100, 2)
+  
+  # Add a header row for the variable name, making the rest of the data align
+  freq_df <- rbind(data.frame(Value = var, Frequency = NA, Percentage = NA), freq_df)
+  
+  return(freq_df)
 }
 
-# Apply the function to each variable and combine results
+# Combine the table
 freq_tables <- lapply(variables, frequency_table, data = df)
 freq_table_combined <- do.call(rbind, freq_tables)
-
-# Order the data frame by Variable
-freq_table_combined <- freq_table_combined[order(freq_table_combined$Variable),]
-
+# No need to order here since each table starts with the variable name
 # View the combined frequency table
 print(freq_table_combined)
 
+# Print out a neat frequency table
+if (!requireNamespace("knitr", quietly = TRUE)) install.packages("knitr")
+knitr::kable(freq_table_combined, row.names = FALSE)
+
+
+
+
+## Look at the descriptive statistics of the variables
 # Initialize a data frame to store the results
 descriptive_stats <- data.frame(Variable = character(),
                                 Mean = numeric(),
@@ -78,6 +99,10 @@ colnames(descriptive_stats) <- c("Variable", "Mean", "Median", "Standard Deviati
 print(descriptive_stats)
 
 
+
+
+
+
 # Preprocessing 
 
 ## Create a new data frame with only the specified variables
@@ -87,7 +112,7 @@ subset <- df[, variables]
 ## View the new data frame
 head(subset)
 
-# load the Hmisc package
+# load the Hmisc package for preprocessing
 library(Hmisc)
 
 # Descriptive labels
@@ -133,14 +158,12 @@ for (i in 1:length(variable_names)) {
 }
 
 
-# recode
-subset$agr7_fig <- ifelse(subset$agr7_fig == 1 | subset$agr7_fig == 2, 1, subset$agr7_fig)
-subset$agr6_fig <- ifelse(subset$agr6_fig == 1 | subset$agr6_fig == 2, 1, subset$agr6_fig)
-subset$agr5_fig <- ifelse(subset$agr5_fig == 1 | subset$agr5_fig == 2, 1, subset$agr5_fig)
+# Binary recode fight variable 
+#subset$agr7_fig <- ifelse(subset$agr7_fig == 1 | subset$agr7_fig == 2, 1, subset$agr7_fig)
+#subset$agr6_fig <- ifelse(subset$agr6_fig == 1 | subset$agr6_fig == 2, 1, subset$agr6_fig)
+#subset$agr5_fig <- ifelse(subset$agr5_fig == 1 | subset$agr5_fig == 2, 1, subset$agr5_fig)
 
-# Check for class of all variables in variables
-variable_classes <- sapply(subset, class)
-print(variable_classes)
+
 
 
 # Loop through each variable and calculate descriptive statistics
@@ -159,9 +182,9 @@ for (var in variables) {
   }
   
   # Calculating statistics
-  mean_val <- mean(current_var_numeric, na.rm = TRUE)
-  median_val <- median(current_var_numeric, na.rm = TRUE)
-  sd_val <- sd(current_var_numeric, na.rm = TRUE)
+  mean_val <- round(mean(current_var_numeric, na.rm = TRUE), 3)
+  median_val <- median(current_var_numeric, na.rm = TRUE)  # Median typically not rounded, but you can if desired
+  sd_val <- round(sd(current_var_numeric, na.rm = TRUE), 3)
   min_val <- min(current_var_numeric, na.rm = TRUE)
   max_val <- max(current_var_numeric, na.rm = TRUE)
   missing_val <- sum(is.na(current_var_numeric))
@@ -180,12 +203,10 @@ rownames(descriptive_stats) <- NULL  # Clean up row names
 print(descriptive_stats)
 
 
-# Load the unlabelled subset
-subset <- df[, variables]
+#sapply(subset, class)
 
-## Correlation Matrix
-sapply(subset, class)
 
+## Recode the two haven_labelled variable as numeric
 subset$gender6 <- as.numeric(subset$gender6)
 subset$race <- as.numeric(subset$race)
 
@@ -202,19 +223,55 @@ subset$crisk6 <- 8 - subset$crisk6
 subset$cimp7 <- 6 - subset$cimp7
 subset$crisk7 <- 8 - subset$crisk7
 
-subset$sc5 <- subset$cimp5 + subset$crisk5
-subset$sc6 <- subset$cimp6 + subset$crisk6
-subset$sc7 <- subset$cimp7 + subset$crisk7
+# Create the composite self-control variable
+# subset$sc5 <- subset$cimp5 + subset$crisk5
+# subset$sc6 <- subset$cimp6 + subset$crisk6
+# subset$sc7 <- subset$cimp7 + subset$crisk7
 
-rcorr(as.matrix(subset))
+
+# Check for class of all variables in variables
+## Note: They need to be all numeric
+variable_classes <- sapply(subset, class)
+print(variable_classes)
+
+
+
+
+
+# Bivariate-level Correlation
+cor_matrix <- cor(subset, use = "complete.obs")
+rounded_cor_matrix <- round(cor_matrix, 2)
+
+## Get the number of rows (or columns, since it's square) of the matrix
+n <- nrow(rounded_cor_matrix)
+
+## Set the lower triangle, including the diagonal, to NA
+rounded_cor_matrix[lower.tri(rounded_cor_matrix, diag = TRUE)] <- NA
+print(rounded_cor_matrix)
+
+# Outout to excel
+library(openxlsx) ## load the package needed
+## Create a new workbook
+wb <- createWorkbook()
+# Add a worksheet to the workbook
+addWorksheet(wb, "Upper Half Correlation Matrix")
+# Write the rounded correlation matrix to the worksheet
+writeData(wb, sheet = "Upper Half Correlation Matrix", x = rounded_cor_matrix)
+
+# Optionally, you can also auto-size the column widths for better readability
+setColWidths(wb, sheet = 1, cols = 1:ncol(rounded_cor_matrix), widths = "auto")
+
+# Save the workbook to your working directory
+saveWorkbook(wb, "Upper_Half_Correlation_Matrix.xlsx", overwrite = TRUE)
+
+
 
 # Visualize the correlation
 # Install packages if necessary
 if (!requireNamespace("Hmisc", quietly = TRUE)) install.packages("Hmisc")
 if (!requireNamespace("corrplot", quietly = TRUE)) install.packages("corrplot")
 
-# Load packages
-library(Hmisc)
+# Load packages (assuming Hmisc is loaded)
 library(corrplot)
 
 # Compute the correlation matrix. Note: rcorr(as.matrix(subset)) returns a list with the matrix at $r
@@ -227,11 +284,10 @@ corrplot(cor_matrix, method = "color",
          tl.col = "black", tl.srt = 45, # Adjust text color and rotation for readability
          cl.lim = c(-1, 1)) # Ensure color scale represents full range of correlations
 
-# Display the modified dataframe
-print(subset)
-
 # Write to CSV
 write.csv(subset, file = "subset211.csv", row.names = FALSE)
+
+
 
 
 
@@ -244,15 +300,15 @@ library(Amelia)
 
 # Missingness frequency by variable
 n_miss <- miss_var_summary(subset)
-print(n_miss)
+print(n_miss, n=40)
 
 #Frequencies of missing data pattern
 md_pattern <- md.pattern(subset)
 print(md_pattern)
 
 
-missmap(subset, main = "Missing Data Pattern", 
-        col = c("yellow", "black"), legend = TRUE)
+# missmap(subset, main = "Missing Data Pattern", 
+        #col = c("yellow", "black"), legend = TRUE)
 
 
 # MCAR TEST (result significant, Not completely at random)
@@ -263,12 +319,18 @@ print(MCAR_result)
 vis_miss(subset)
 
 
+
+
+
+
+#### SEM  ###################
+
 # Model Specification
 sem1 <- ' 
  # Measurement Model
  
  agr7 =~ agr7_fig + agr7_hit + agr7_wepn
- agr6 =~ agr6_fig + agr6_hit + agr6_wepn + agr5_hpc
+ agr6 =~ agr6_fig + agr6_hit + agr6_wepn + agr6_hpc
  agr5 =~ agr5_fig + agr5_hpc 
  
  
@@ -328,9 +390,62 @@ sem1 <- '
  fsc5 ~~ par5
 '
 
+sem2<- 
+  '
+# Random Intercepts
+ri_agr =~ 1*agr5_fig + 1*agr6_fig + 1*agr7_fig
+ri_fsc =~ 1*cimp5 + 1*cimp6 + 1*cimp7
+ri_par =~ 1*cpar4_dibn + 1*cpar5_dibn
 
+# Measurement Models with adjustments for Random Intercepts
+agr7 =~ agr7_fig + agr7_hit + agr7_wepn
+agr6 =~ agr6_fig + agr6_hit + agr6_wepn + agr6_hpc
+agr5 =~ agr5_fig + agr5_hpc
+
+fsc5 =~ cimp5 + crisk5
+fsc6 =~ cimp6 + crisk6
+fsc7 =~ cimp7 + crisk7
+
+par4 =~ cpar4_dibn + cpar4_ditr + cpar4_dire
+par5 =~ cpar5_dibn + cpar5_ditr + cpar5_dire
+
+# Structural Model with Cross-Lagged Paths and Random Intercepts
+agr7 ~ fsc6 + agr6 + par5 + ri_agr
+agr6 ~ fsc5 + agr5 + par5 + ri_agr
+agr5 ~ par4 + gender6 + pared + race + married + ri_agr
+
+fsc7 ~ agr6 + fsc6 + par5 + ri_fsc
+fsc6 ~ agr5 + fsc5 + par5 + ri_fsc
+fsc5 ~ par4 + gender6 + pared + race + married + ri_fsc
+
+par5 ~ par4 + ri_par
+
+# Adjust Covariances for Random Intercepts
+ri_agr ~~ ri_fsc
+ri_agr ~~ ri_par
+ri_fsc ~~ ri_par
+
+agr6_fig ~~ agr5_fig
+crisk6 ~~ crisk7
+crisk5 ~~ crisk6
+crisk5 ~~ crisk7
+cimp5 ~~ cimp6
+cimp6 ~~ cimp7
+cimp5 ~~ cimp7
+cpar4_dire ~~ cpar5_dire
+cpar4_ditr ~~ cpar5_ditr
+cpar4_dibn ~~ cpar5_dibn
+
+# Covariances among measurement errors or specific paths if needed
+
+'
+
+# Model Fitting
+
+## Specify the ordinal variables
+# List-wise Deletion
 fit1 <- sem(model = sem1, data = subset, estimator="MLR")
-
+# FIML
 fit2 <- sem(model = sem1, data = subset, estimator="MLR", missing="fiml", 
             fixed.x=FALSE)
 
