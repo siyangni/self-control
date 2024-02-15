@@ -7,14 +7,14 @@ library(psych) #EDA
 
 # Read into the data file
 library(haven) # Process foreign data
-# df <- read_dta("processed211.dta")
-load("sem211.RData")
+# df <- read_dta("processed214.dta")
+load("sem214.RData")
 
 # Check df
 dim(df)
 head(df, 5)
 
-# save(df, file="sem211.RData")
+save(df, file="sem214.RData")
 
 # EDA
 
@@ -390,53 +390,80 @@ sem1 <- '
  fsc5 ~~ par5
 '
 
-sem2<- 
-  '
-# Random Intercepts
-ri_agr =~ 1*agr5_fig + 1*agr6_fig + 1*agr7_fig
-ri_fsc =~ 1*cimp5 + 1*cimp6 + 1*cimp7
-ri_par =~ 1*cpar4_dibn + 1*cpar5_dibn
+sem2 <- '
 
-# Measurement Models with adjustments for Random Intercepts
+#### Measurement Model ########
+
 agr7 =~ agr7_fig + agr7_hit + agr7_wepn
 agr6 =~ agr6_fig + agr6_hit + agr6_wepn + agr6_hpc
-agr5 =~ agr5_fig + agr5_hpc
+agr5 =~ agr5_fig + agr5_hpc 
+
+## Self-control
 
 fsc5 =~ cimp5 + crisk5
 fsc6 =~ cimp6 + crisk6
 fsc7 =~ cimp7 + crisk7
 
+## Parenting
+
 par4 =~ cpar4_dibn + cpar4_ditr + cpar4_dire
 par5 =~ cpar5_dibn + cpar5_ditr + cpar5_dire
 
-# Structural Model with Cross-Lagged Paths and Random Intercepts
-agr7 ~ fsc6 + agr6 + par5 + ri_agr
-agr6 ~ fsc5 + agr5 + par5 + ri_agr
-agr5 ~ par4 + gender6 + pared + race + married + ri_agr
+###### RI Part #########
 
-fsc7 ~ agr6 + fsc6 + par5 + ri_fsc
-fsc6 ~ agr5 + fsc5 + par5 + ri_fsc
-fsc5 ~ par4 + gender6 + pared + race + married + ri_fsc
+# Between Part
+ri_agr =~ 1*agr5 + 1*agr6 + 1*agr7
+ri_fsc =~ 1*fsc5 + 1*fsc6 + 1*fsc7
+ri_par =~ 1*par4 + 1*par5
 
-par5 ~ par4 + ri_par
+# Within Part
+w_agr5 =~ 1*agr5  
+w_agr6 =~ 1*agr6  
+w_agr7 =~ 1*agr7  
 
-# Adjust Covariances for Random Intercepts
+w_fsc5 =~ 1*fsc5  
+w_fsc6 =~ 1*fsc6  
+w_fsc7 =~ 1*fsc7  
+
+w_par4 =~ 1*par4  
+w_par5 =~ 1*par5  
+
+
+####### Structural Model #############
+
+# Lagged effects between the within-person centered variables 
+w_agr7 ~ w_fsc6 + w_agr6 + w_par5
+w_agr6 ~ w_fsc5 + w_agr5 + w_par5
+w_agr5 ~ w_par4 + gender6 + pared + race + married 
+
+w_fsc7 ~ w_agr6 + w_fsc6 + w_par5
+w_fsc6 ~ w_agr5 + w_fsc5 + w_par5 
+w_fsc5 ~ w_par4 + gender6 + pared + race + married 
+
+w_par5 ~ w_par4  
+
+# Variances and Covariances
+
+## Covariances between residuals of within
+w_agr5 ~~ w_fsc5
+w_agr6 ~~ w_fsc6
+w_agr7 ~~ w_fsc7
+
+## Variances of within
+w_agr5 ~~ w_agr5
+w_agr6 ~~ w_agr6
+w_agr7 ~~ w_agr7
+w_fsc5 ~~ w_fsc5
+w_fsc6 ~~ w_fsc6
+w_fsc7 ~~ w_fsc7
+w_par4 ~~ w_par4
+w_par5 ~~ w_par5
+
+## Covariances for between 
 ri_agr ~~ ri_fsc
 ri_agr ~~ ri_par
 ri_fsc ~~ ri_par
 
-agr6_fig ~~ agr5_fig
-crisk6 ~~ crisk7
-crisk5 ~~ crisk6
-crisk5 ~~ crisk7
-cimp5 ~~ cimp6
-cimp6 ~~ cimp7
-cimp5 ~~ cimp7
-cpar4_dire ~~ cpar5_dire
-cpar4_ditr ~~ cpar5_ditr
-cpar4_dibn ~~ cpar5_dibn
-
-# Covariances among measurement errors or specific paths if needed
 
 '
 
@@ -444,7 +471,7 @@ cpar4_dibn ~~ cpar5_dibn
 
 ## Specify the ordinal variables
 # List-wise Deletion
-fit1 <- sem(model = sem1, data = subset, estimator="MLR")
+fit1 <- sem(model = sem2, data = subset, estimator="MLR",check.gradient = FALSE)
 # FIML
 fit2 <- sem(model = sem1, data = subset, estimator="MLR", missing="fiml", 
             fixed.x=FALSE)
